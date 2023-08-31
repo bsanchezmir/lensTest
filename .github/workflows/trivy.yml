@@ -27,7 +27,7 @@ jobs:
         
     - name: Run Trivy vulnerability scanner
       run: |
-        trivy sbom --format sarif --vuln-type os,library --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --output trivy-results.sarif sboms/bsanchezmir/lensTest.json
+        trivy sbom --format sarif --vuln-type os,library --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --output trivy-results.sarif securityCenter/sboms/$GITHUB_REPOSITORY.json
 
     - name: ls sarif file
       run: |
