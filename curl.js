@@ -1,0 +1,1 @@
+curl https://www.7-zip.org/a/7z2301-x64.exe
