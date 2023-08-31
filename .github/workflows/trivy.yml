@@ -17,14 +17,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
-
-    - name: Checkout securityCenter repository
-      uses: actions/checkout@v3
-      with:
-        repository: bsanchezmir/securityCenter
-        token: ${{ secrets.GHACTIONSECRET }}
-        path: securityCenter
       
     - name: Set up Trivy
       run: |
@@ -35,13 +27,13 @@ jobs:
         
     - name: Run Trivy vulnerability scanner
       run: |
-        trivy sbom --format sarif --vuln-type os,library --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --output trivy-results.sarif securityCenter/sboms/$GITHUB_REPOSITORY.json
+        trivy sbom --format sarif --vuln-type os,library --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --output trivy-results.sarif sboms/bsanchezmir/lensTest.json
 
     - name: ls sarif file
       run: |
         cat trivy-results.sarif
 
-    - name: Upload SARIF file
+    - name: Upload SARIF for SBOM
       uses: github/codeql-action/upload-sarif@v2
       with:
           sarif_file: trivy-results.sarif
@@ -49,5 +41,13 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GHACTIONSECRET }}
 
+    - name: Run Trivy vulnerability scanner FS
+      run: |
+        trivy fs ./ --format sarif --vuln-type os,library --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --output trivy-results-fs.sarif 
 
-
+    - name: Upload SARIF for FS
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: trivy-results-fs.sarif
+      env:
+        GITHUB_TOKEN: ${{ secrets.GHACTIONSECRET }}
