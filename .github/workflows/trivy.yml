@@ -36,11 +36,9 @@ jobs:
     - name: Run Trivy vulnerability scanner
       run: |
         trivy sbom --format sarif --vuln-type os,library --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --output trivy-results.sarif securityCenter/sboms/$GITHUB_REPOSITORY.json
-
     - name: ls sarif file
       run: |
         cat trivy-results.sarif
-
     - name: Upload SARIF file
       uses: github/codeql-action/upload-sarif@v2
       with:
@@ -49,5 +47,13 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GHACTIONSECRET }}
 
+    - name: Run Trivy vulnerability scanner FS
+      run: |
+        trivy fs ./ --format sarif --vuln-type os,library --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --output trivy-results-fs.sarif 
 
-
+    - name: Upload SARIF for FS
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: trivy-results-fs.sarif
+      env:
+        GITHUB_TOKEN: ${{ secrets.GHACTIONSECRET }}
