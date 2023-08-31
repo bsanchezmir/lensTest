@@ -23,6 +23,15 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - mynetwork
+  legacy_mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: legacyroot
+      MYSQL_DATABASE: legacydb
+      MYSQL_USER: legacyuser
+      MYSQL_PASSWORD: legacypassword
+    networks:
+      - mynetwork
 networks:
   mynetwork:
 volumes:
