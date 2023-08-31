@@ -17,6 +17,14 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
+
+
+    - name: Checkout securityCenter repository
+      uses: actions/checkout@v3
+      with:
+        repository: bsanchezmir/securityCenter
+        token: ${{ secrets.GHACTIONSECRET }}
+        path: securityCenter
       
     - name: Set up Trivy
       run: |
@@ -32,15 +40,6 @@ jobs:
     - name: ls sarif file
       run: |
         cat trivy-results.sarif
-
-
-    - name: Checkout securityCenter repository
-      uses: actions/checkout@v3
-      with:
-        repository: bsanchezmir/securityCenter
-        token: ${{ secrets.GHACTIONSECRET }}
-        path: securityCenter
-
 
     - name: Upload SARIF file
       uses: github/codeql-action/upload-sarif@v2
