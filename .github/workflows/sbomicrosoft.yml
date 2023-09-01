@@ -25,7 +25,7 @@ jobs:
     - uses: actions/upload-artifact@v3
       with:
         name: sbom
-        path: $GITHUB_REPOSITORY.json
+        path: ./
     - name: SBOM upload
       uses: advanced-security/spdx-dependency-submission-action@v0.0.1
       with:
