@@ -19,14 +19,18 @@ jobs:
       run: |
         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
+    - name: Directory for SBOM
+      run: mkdir sbom
+
     - name: Generate SBOM
-      run: syft . -ospdx-json@2.2=$GITHUB_REPOSITORY.json
+      run: syft . -o spdx-json@2.2=sbom/$GITHUB_REPOSITORY.json
 
     - uses: actions/upload-artifact@v3
       with:
         name: sbom
-        path: ./
+        path: sbom/
+        
     - name: SBOM upload
       uses: advanced-security/spdx-dependency-submission-action@v0.0.1
       with:
-        filePath: "$GITHUB_REPOSITORY.json"
+        filePath: sbom/$GITHUB_REPOSITORY.json
