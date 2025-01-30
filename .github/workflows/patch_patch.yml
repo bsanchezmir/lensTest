@@ -54,15 +54,19 @@ jobs:
           image: docker.io/library/alpine:3.18.4
           image-report: "report.json"
           patched-tag: "patched"
-          timeout: "5m"           # optional
-          output: "vex.json"      # store the result as vex.json
-          format: "openvex"       # default is openvex
+          timeout: "5m"            # optional
+          output: "vex.json"       # store the result as vex.json
+          format: "openvex"        # default is openvex
 
       # 5. Fix permissions on vex.json so we can read it
       - name: Fix vex.json permissions
         if: steps.copa.conclusion == 'success'
         run: |
-          chmod 644 vex.json
+          if [ -f vex.json ]; then
+            sudo chmod 644 vex.json
+          else
+            echo "No vex.json found. Possibly no patch was generated or no vulnerabilities were fixed."
+          fi
 
       # 6. Display which CVEs got fixed
       - name: Show patched CVEs
