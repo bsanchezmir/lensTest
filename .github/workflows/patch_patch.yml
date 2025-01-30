@@ -86,21 +86,28 @@ jobs:
           else
             echo "No vex.json found. Possibly no patches applied."
             echo "None" > cves_fixed.txt
-          fi
 
-      # 5. Upload artifacts (Trivy report and cves_fixed.txt)
+      # 5. Create artifact name via a shell step (to avoid 'replace()')
+      - name: Create artifact name
+        id: artifact_name
+        run: |
+          # Convert slashes and colons to dashes using 'tr'
+          SANITIZED=$(echo "${{ matrix.images }}" | tr '/:' '-')
+          ARTIFACT_NAME="patched-details-${SANITIZED}"
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+
+      # 6. Upload artifacts (Trivy report and cves_fixed.txt)
       - name: Upload artifacts
         if: steps.copa.conclusion == 'success'
         uses: actions/upload-artifact@v3
         with:
-          # Use nested replace instead of pipeline
-          name: patched-details-${{ replace(replace(matrix.images, '/', '-'), ':', '-') }}
+          name: ${{ steps.artifact_name.outputs.artifact_name }}
           path: |
             report.json
             cves_fixed.txt
           if-no-files-found: ignore
 
-      # 6. Log in to GHCR if COPA succeeded
+      # 7. Log in to GHCR if COPA succeeded
       - name: Login to GHCR
         if: steps.copa.conclusion == 'success'
         id: login
@@ -110,7 +117,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. Push patched image to GHCR
+      # 8. Push patched image to GHCR
       - name: Push patched image
         if: steps.login.conclusion == 'success'
         run: |
