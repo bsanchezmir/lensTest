@@ -20,12 +20,6 @@ jobs:
       #max-parallel: 5
       matrix:
         images:
-          - "amazon/aws-k8s-cni-init:v1.19.2"
-          - "amazon/aws-k8s-cni:v1.19.2"
-          - "amazon/aws-network-policy-agent:v1.1.6"
-          - "amazon/aws-guardduty-agent:v1.8.1"
-          - "amazon/aws-ebs-csi-driver:v1.38.1"
-          - "coredns/coredns:v1.11.4"
           - "k8s.gcr.io/sig-storage/csi-attacher:v4.7.0"
           - "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.12.0"
           - "k8s.gcr.io/sig-storage/csi-provisioner:v5.1.0"
@@ -53,7 +47,6 @@ jobs:
           - "ghcr.io/fluxcd/kustomize-controller:v1.2.2"
           - "ghcr.io/fluxcd/notification-controller:v1.2.4"
           - "ghcr.io/fluxcd/source-controller:v1.2.4"
-          - "public.ecr.aws/eks/aws-load-balancer-controller:v2.7.2"
           - "quay.io/jetstack/cert-manager-cainjector:v1.14.4"
           - "quay.io/jetstack/cert-manager-controller:v1.14.4"
           - "quay.io/jetstack/cert-manager-webhook:v1.14.4"
