@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 2
+      #max-parallel: 2
       matrix:
         images:
           - "docker.io/library/alpine:3.18.4"
@@ -55,8 +55,6 @@ jobs:
 
           echo "Contents of cves_report.txt:"
           cat cves_report.txt
-
-
 
       # 3. Check vulnerability count for fixable vulns
       - name: Check vulnerability count
@@ -125,3 +123,29 @@ jobs:
             report.json
             cves_report.txt
           if-no-files-found: ignore
+
+      - name: Download all artifacts and generate report
+        uses: actions/download-artifact@v4
+        with:
+          path: all_cves
+
+      - name: Merge CVEs into a single file
+        run: |
+          echo "### CVE Report for Release" > full_cves_report.md
+          echo "" >> full_cves_report.md
+
+          for file in $(find all_cves -name "cves_report.txt"); do
+            IMAGE_NAME=$(basename $(dirname "$file"))  # Extract image name from directory
+            echo "## CVEs for Image: $IMAGE_NAME" >> full_cves_report.md
+            
+            if [ -s "$file" ]; then
+              cat "$file" >> full_cves_report.md
+            else
+              echo "**No fixable vulnerabilities found.**" >> full_cves_report.md
+            fi
+
+            echo "" >> full_cves_report.md
+          done
+
+          echo "Merged CVEs:"
+          cat full_cves_report.md
