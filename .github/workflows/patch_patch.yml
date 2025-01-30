@@ -59,7 +59,46 @@ jobs:
           output: vex.json
           format: "openvex"
 
-      # 4. Log in to GHCR if COPA succeeded
+      # 4. Generate a file listing patched CVEs (if COPA ran successfully)
+      - name: Collect patched CVEs
+        if: steps.copa.conclusion == 'success'
+        run: |
+          if [ -f vex.json ]; then
+            sudo chmod 644 vex.json
+
+            echo "=== Parsing vex.json for ${{ matrix.images }} ==="
+            PATCHED_CVES=$(jq -r '
+              .statements
+              | map(select(.status == "fixed"))
+              | .[].vulnerability.id
+            ' vex.json)
+
+            if [ -n "$PATCHED_CVES" ]; then
+              echo "CVEs patched in ${{ matrix.images }}:"
+              echo "$PATCHED_CVES"
+              echo "$PATCHED_CVES" > cves_fixed.txt
+            else
+              echo "No CVEs were marked as 'fixed' in vex.json."
+              echo "None" > cves_fixed.txt
+            fi
+          else
+            echo "No vex.json found. Possibly no patches applied."
+            echo "None" > cves_fixed.txt
+          fi
+
+      # 5. Upload artifacts for reference (Trivy report, patched CVEs)
+      - name: Upload artifacts
+        if: steps.copa.conclusion == 'success'
+        uses: actions/upload-artifact@v3
+        with:
+          # We'll create a sanitized suffix based on the image name
+          name: patched-details-${{ matrix.images | replace('/', '-') | replace(':', '-') }}
+          path: |
+            report.json
+            cves_fixed.txt
+          if-no-files-found: ignore
+
+      # 6. Log in to GHCR if COPA succeeded
       - name: Login to GHCR
         if: steps.copa.conclusion == 'success'
         id: login
@@ -69,19 +108,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 5. Push patched image to YOUR GHCR (replace YOUR_USERNAME if needed)
+      # 7. Push patched image to GHCR
       - name: Push patched image
         if: steps.login.conclusion == 'success'
         run: |
           # We'll create a tag that's safe (remove / and :)
           SANITIZED_TAG=$(echo "${{ matrix.images }}" | tr '/:' '-')
-
-          # If your GitHub username is bsanchezmir, you'd do:
-          # REPO_OWNER="bsanchezmir"
-          # If you prefer to do it dynamically, you can use:
           REPO_OWNER="${{ github.repository_owner }}"
-
-          # For example:
           FINAL_IMAGE="ghcr.io/${REPO_OWNER}/copa-patched:${SANITIZED_TAG}"
 
           echo "Retagging ${{ steps.copa.outputs.patched-image }} => $FINAL_IMAGE"
