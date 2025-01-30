@@ -1,0 +1,95 @@
+name: Patch vulnerable image and push to GHCR
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:  # <-- enables manual trigger
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  patch-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Check out your repository (if needed)
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # 2. Generate a Trivy report for fixable OS vulnerabilities
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@d43c1f16c00cfd3978dde6c07f4bbcf9eb6993ca
+        with:
+          scan-type: "image"
+          format: "json"
+          output: "report.json"
+          ignore-unfixed: true
+          vuln-type: "os"
+          image-ref: docker.io/library/alpine:3.18.4
+
+      # 3. Check how many fixable OS vulnerabilities were found
+      - name: Check vulnerability count
+        id: vuln_count
+        run: |
+          report_file="report.json"
+          vuln_count=$(jq 'if .Results then [
+              .Results[]
+              | select(.Class=="os-pkgs" and .Vulnerabilities!=null)
+              | .Vulnerabilities[]
+            ] | length else 0 end' "$report_file")
+
+          echo "Detected $vuln_count fixable OS vulnerabilities in alpine:3.18.4"
+          echo "vuln_count=$vuln_count" >> $GITHUB_OUTPUT
+
+      # 4. Patch vulnerabilities (if any) with COPA
+      - name: Run Copa action
+        if: steps.vuln_count.outputs.vuln_count != '0'
+        id: copa
+        uses: project-copacetic/copa-action@main
+        with:
+          image: docker.io/library/alpine:3.18.4
+          image-report: "report.json"
+          patched-tag: "patched"
+          timeout: "5m"           # optional
+          output: "vex.json"      # store the result as vex.json
+          format: "openvex"       # default is openvex
+
+      # 5. Display which CVEs got fixed
+      - name: Show patched CVEs
+        if: steps.copa.conclusion == 'success'
+        run: |
+          echo "The following CVEs were patched in alpine:3.18.4:"
+          jq -r '
+            .statements
+            | map(select(.status == "fixed"))
+            | .[].vulnerability.id
+          ' vex.json
+
+      # 6. Log in to GitHub Container Registry (GHCR)
+      - name: Login to GHCR
+        if: steps.copa.conclusion == 'success' || steps.vuln_count.outputs.vuln_count == '0'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 7. Tag and push the final image to GHCR
+      - name: Push final image to GHCR
+        if: steps.login.conclusion == 'success'
+        run: |
+          if [ "${{ steps.vuln_count.outputs.vuln_count }}" = "0" ]; then
+            echo "No vulnerabilities to patch, pushing original alpine:3.18.4"
+            docker pull docker.io/library/alpine:3.18.4
+            docker tag docker.io/library/alpine:3.18.4 ghcr.io/${{ github.repository_owner }}/alpine-patched:latest
+          else
+            PATCHED_LOCAL="${{ steps.copa.outputs.patched-image }}"
+            docker tag "$PATCHED_LOCAL" ghcr.io/${{ github.repository_owner }}/alpine-patched:latest
+          fi
+
+          echo "Pushing ghcr.io/${{ github.repository_owner }}/alpine-patched:latest..."
+          docker push ghcr.io/${{ github.repository_owner }}/alpine-patched:latest
