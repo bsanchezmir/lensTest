@@ -38,19 +38,19 @@ jobs:
 
       # 2. Extract CVE, Severity, and Title from Trivy's report.json
       - name: Extract CVEs from Trivy Report
-        id: extract_cves
         run: |
-          echo "=== Extracting OS-level CVEs from Trivy report for ${{ matrix.images }} ==="
+          echo "=== Extracting OS-level CVEs from Trivy report ==="
           jq -r '
-            # If .Results is missing or null, treat it as an empty array:
             (.Results? // [])
             | map(select(.Class == "os-pkgs" and .Vulnerabilities != null))
-            | map(.Vulnerabilities[]?)
+            | .[]
+            | .Vulnerabilities[]?
             | "CVE: \(.VulnerabilityID // "N/A"), Severity: \(.Severity // "N/A"), Title: \(.Title // "N/A")"
           ' report.json > cves_report.txt
 
           echo "Contents of cves_report.txt:"
           cat cves_report.txt
+
 
 
       # 3. Check vulnerability count for fixable vulns
