@@ -26,7 +26,6 @@ jobs:
           - "k8s.gcr.io/sig-storage/csi-resizer:v1.12.0"
           - "k8s.gcr.io/sig-storage/csi-snapshotter:v8.1.0"
           - "k8s.gcr.io/kube-proxy:v1.29.11"
-          - "k8s.gcr.io/livenessprobe:v2.14.0"
           - "amazon/aws-for-fluent-bit:2.32.2"
           - "amazon/aws-cli:2.15.36"
           - "bitnami/discourse:3.0.6"
