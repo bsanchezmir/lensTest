@@ -20,9 +20,7 @@ jobs:
       #max-parallel: 2
       matrix:
         images:
-          - "docker.io/library/alpine:3.18.4"
-          - "docker.io/openpolicyagent/opa:0.46.0"
-          - "docker.io/library/hello-world:latest"
+
 
           - "ghcr.io/aquasecurity/trivy-operator:0.16.1"
           - "quay.io/k8slens/bored-agent:0.12.8"
@@ -116,7 +114,7 @@ jobs:
         id: artifact_name
         run: |
           SANITIZED_IMG=$(echo "${{ matrix.images }}" | tr '/:' '-')
-          echo "artifact_name=trivy-and-cves-${SANITIZED_IMG}" >> $GITHUB_OUTPUT
+          echo "artifact_name=${SANITIZED_IMG}" >> $GITHUB_OUTPUT
 
       # 8. Upload artifacts (Trivy report.json & cves_report.txt)
       - name: Upload artifacts
