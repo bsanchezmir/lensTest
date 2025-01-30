@@ -25,6 +25,9 @@ jobs:
           - "ghcr.io/aquasecurity/trivy-operator:0.16.1"
           - "quay.io/k8slens/bored-agent:0.12.8"
           - "quay.io/k8slens/recurly-api-proxy:0.5.3"
+          - "gcr.io/distroless/cc-debian10"
+
+
 
 
 
