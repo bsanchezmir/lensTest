@@ -24,7 +24,8 @@ jobs:
           - "docker.io/openpolicyagent/opa:0.46.0"
           - "docker.io/library/hello-world:latest"
           - "quay.io/k8slens/bored-agent:0.12.8"
-
+          - "ghcr.io/aquasecurity/trivy-operator:0.16.1"
+          - "quay.io/k8slens/recurly-api-proxy:0.5.3"
     steps:
       # 1. Trivy scan for OS-level vulnerabilities
       - name: Generate Trivy Report
