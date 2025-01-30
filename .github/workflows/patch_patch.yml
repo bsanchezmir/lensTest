@@ -167,7 +167,7 @@ jobs:
           name: full-cve-report
           path: full_cves_report.md
 
-  update_release_notes:
+update_release_notes:
     runs-on: ubuntu-latest
     needs: merge_cves 
     permissions:
@@ -179,16 +179,24 @@ jobs:
           name: full-cve-report
           path: .
 
-      - name: Authenticate with GitHub CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+      # Ensure GitHub CLI uses provided GH_TOKEN (no need for explicit login)
+      - name: Set up GH_TOKEN
+        run: echo "Using GH_TOKEN for authentication"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Check if an existing release exists
       - name: Check for Existing Release
         id: get_release
         run: |
           LATEST_RELEASE=$(gh release list --limit 1 | awk '{print $1}')
-          echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
+          if [ -z "$LATEST_RELEASE" ]; then
+            echo "No existing release found."
+            echo "LATEST_RELEASE=" >> $GITHUB_ENV
+          else
+            echo "Latest release: $LATEST_RELEASE"
+            echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -197,8 +205,13 @@ jobs:
           RELEASE_TITLE="Security Patch - $(date +'%Y-%m-%d')"
           RELEASE_TAG="security-patch-$(date +'%Y-%m-%d')"
 
-          # Fetch existing release notes
+          # Fetch existing release notes (if any)
           EXISTING_NOTES=$(gh release view "$LATEST_RELEASE" --json body -q '.body' || echo "")
+
+          # If the CVE report is empty, add a placeholder message
+          if [ ! -s full_cves_report.md ]; then
+            echo "No new fixable vulnerabilities in this run." > full_cves_report.md
+          fi
 
           # Append the new CVE report to the existing release notes
           echo "### New CVEs Added from Latest Run" > new_cves.md
