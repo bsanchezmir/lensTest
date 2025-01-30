@@ -86,6 +86,8 @@ jobs:
           else
             echo "No vex.json found. Possibly no patches applied."
             echo "None" > cves_fixed.txt
+          fi
+
 
       # 5. Create artifact name via a shell step (to avoid 'replace()')
       - name: Create artifact name
@@ -99,7 +101,7 @@ jobs:
       # 6. Upload artifacts (Trivy report and cves_fixed.txt)
       - name: Upload artifacts
         if: steps.copa.conclusion == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ steps.artifact_name.outputs.artifact_name }}
           path: |
