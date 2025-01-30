@@ -29,6 +29,9 @@ jobs:
           - "quay.io/k8slens/recurly-api-proxy:0.5.3"
 
 
+
+
+
     steps:
       # 1. Trivy scan for OS-level vulnerabilities
       - name: Generate Trivy Report
@@ -40,6 +43,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: "os"
           image-ref: ${{ matrix.images }}
+          
 
       # 2. Extract CVE, Severity, and Title from Trivy's report.json
       - name: Extract CVEs from Trivy Report
@@ -124,28 +128,32 @@ jobs:
             cves_report.txt
           if-no-files-found: ignore
 
-      - name: Download all artifacts and generate report
+  merge_cves:
+    runs-on: ubuntu-latest
+    needs: patch  # Ensures this runs AFTER all matrix jobs complete
+    steps:
+      - name: Download all CVE reports
         uses: actions/download-artifact@v4
         with:
-          path: all_cves
+          path: cve_reports/
 
-      - name: Merge CVEs into a single file
+      - name: Merge all CVE reports into one file
         run: |
           echo "### CVE Report for Release" > full_cves_report.md
           echo "" >> full_cves_report.md
 
-          for file in $(find all_cves -name "cves_report.txt"); do
-            IMAGE_NAME=$(basename $(dirname "$file"))  # Extract image name from directory
+          for file in $(find cve_reports -name "cves_report.txt"); do
+            IMAGE_NAME=$(basename "$(dirname "$file")")  # Extract image name
             echo "## CVEs for Image: $IMAGE_NAME" >> full_cves_report.md
-            
-            if [ -s "$file" ]; then
-              cat "$file" >> full_cves_report.md
-            else
-              echo "**No fixable vulnerabilities found.**" >> full_cves_report.md
-            fi
-
+            cat "$file" >> full_cves_report.md
             echo "" >> full_cves_report.md
           done
 
-          echo "Merged CVEs:"
+          echo "Merged CVE Report:"
           cat full_cves_report.md
+
+      - name: Upload Final Merged CVE Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-cve-report
+          path: full_cves_report.md
