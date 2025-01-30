@@ -1,4 +1,5 @@
 name: Patch vulnerable images
+
 on:
   push:
     branches:
@@ -7,12 +8,13 @@ on:
       - '**.md'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   patch:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +24,7 @@ jobs:
           - "docker.io/library/hello-world:latest"
 
     steps:
-      # 1. Trivy scan for fixable OS vulnerabilities
+      # 1. Trivy scan for OS-level vulnerabilities
       - name: Generate Trivy Report
         uses: aquasecurity/trivy-action@d43c1f16c00cfd3978dde6c07f4bbcf9eb6993ca
         with:
@@ -33,19 +35,18 @@ jobs:
           vuln-type: "os"
           image-ref: ${{ matrix.images }}
 
-      # 2. Check vulnerability count
+      # 2. Count fixable vulnerabilities
       - name: Check vulnerability count
         id: vuln_count
         run: |
-          vuln_count=$(jq 'if .Results then [
-              .Results[] 
-              | select(.Class=="os-pkgs" and .Vulnerabilities!=null) 
-              | .Vulnerabilities[]
-            ] | length else 0 end' report.json)
+          report_file="report.json"
+          vuln_count=$(jq 'if .Results then [.Results[] 
+            | select(.Class=="os-pkgs" and .Vulnerabilities!=null) 
+            | .Vulnerabilities[]] | length else 0 end' "$report_file")
+          echo "Detected $vuln_count fixable OS vulnerabilities in ${{ matrix.images }}"
           echo "vuln_count=$vuln_count" >> $GITHUB_OUTPUT
-          echo "Detected $vuln_count fixable OS vulnerabilities for ${{ matrix.images }}"
 
-      # 3. Run COPA if we have fixable vulnerabilities
+      # 3. Patch (COPA) if vulnerabilities exist
       - name: Run Copa action
         if: steps.vuln_count.outputs.vuln_count != '0'
         id: copa
@@ -58,41 +59,31 @@ jobs:
           output: vex.json
           format: "openvex"
 
-      # 4. Print vex.json (if generated) so you see if any CVEs were actually fixed
-      - name: Print vex.json
-        if: steps.copa.conclusion == 'success'
-        run: |
-          if [ -f vex.json ]; then
-            sudo chmod 644 vex.json
-            echo "=== vex.json contents for ${{ matrix.images }} ==="
-            cat vex.json
-          else
-            echo "No vex.json found."
-          fi
-
-      # 5. Upload vex.json as artifact under a safe name (no colons/slashes)
-      - name: Upload vex.json artifact
-        if: steps.copa.conclusion == 'success'
-        uses: actions/upload-artifact@v3
-        with:
-          name: vex-json
-          path: vex.json
-          if-no-files-found: ignore
-
-      # 6. Log in to GHCR (only if COPA succeeded)
+      # 4. Log in to GHCR if COPA succeeded
       - name: Login to GHCR
         if: steps.copa.conclusion == 'success'
         id: login
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. Push patched image (if any)
+      # 5. Push patched image to YOUR GHCR (replace YOUR_USERNAME if needed)
       - name: Push patched image
         if: steps.login.conclusion == 'success'
         run: |
-          echo "Retagging and pushing patched image for ${{ matrix.images }}"
-          docker tag ${{ steps.copa.outputs.patched-image }} ghcr.io/project-copacetic/copa-action/test/${{ steps.copa.outputs.patched-image }}
-          docker push ghcr.io/project-copacetic/copa-action/test/${{ steps.copa.outputs.patched-image }}
+          # We'll create a tag that's safe (remove / and :)
+          SANITIZED_TAG=$(echo "${{ matrix.images }}" | tr '/:' '-')
+
+          # If your GitHub username is bsanchezmir, you'd do:
+          # REPO_OWNER="bsanchezmir"
+          # If you prefer to do it dynamically, you can use:
+          REPO_OWNER="${{ github.repository_owner }}"
+
+          # For example:
+          FINAL_IMAGE="ghcr.io/${REPO_OWNER}/copa-patched:${SANITIZED_TAG}"
+
+          echo "Retagging ${{ steps.copa.outputs.patched-image }} => $FINAL_IMAGE"
+          docker tag ${{ steps.copa.outputs.patched-image }} "$FINAL_IMAGE"
+          docker push "$FINAL_IMAGE"
