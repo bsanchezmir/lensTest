@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         images:
           - "docker.io/library/alpine:3.18.4"
@@ -40,16 +41,17 @@ jobs:
         id: extract_cves
         run: |
           echo "=== Extracting OS-level CVEs from Trivy report for ${{ matrix.images }} ==="
-          # We'll parse .Results[].Vulnerabilities[] for Class= "os-pkgs"
           jq -r '
-            .Results[]
-            | select(.Class == "os-pkgs")
-            | if .Vulnerabilities then .Vulnerabilities[] else empty end
+            # If .Results is missing or null, treat it as an empty array:
+            (.Results? // [])
+            | map(select(.Class == "os-pkgs" and .Vulnerabilities != null))
+            | map(.Vulnerabilities[]?)
             | "CVE: \(.VulnerabilityID // "N/A"), Severity: \(.Severity // "N/A"), Title: \(.Title // "N/A")"
           ' report.json > cves_report.txt
 
           echo "Contents of cves_report.txt:"
           cat cves_report.txt
+
 
       # 3. Check vulnerability count for fixable vulns
       - name: Check vulnerability count
@@ -109,7 +111,7 @@ jobs:
           SANITIZED_IMG=$(echo "${{ matrix.images }}" | tr '/:' '-')
           echo "artifact_name=trivy-and-cves-${SANITIZED_IMG}" >> $GITHUB_OUTPUT
 
-      # 8. Upload artifacts (Trivy report.json & cves_report.txt) with the new v4 version
+      # 8. Upload artifacts (Trivy report.json & cves_report.txt)
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
