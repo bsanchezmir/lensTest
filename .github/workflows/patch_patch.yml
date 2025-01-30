@@ -1,5 +1,4 @@
 name: Patch vulnerable images
-
 on:
   push:
     branches:
@@ -8,13 +7,12 @@ on:
       - '**.md'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
   patch:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -24,7 +22,7 @@ jobs:
           - "docker.io/library/hello-world:latest"
 
     steps:
-      # 1. Trivy scan for OS package vulns
+      # 1. Trivy scan for fixable OS vulnerabilities
       - name: Generate Trivy Report
         uses: aquasecurity/trivy-action@d43c1f16c00cfd3978dde6c07f4bbcf9eb6993ca
         with:
@@ -35,21 +33,19 @@ jobs:
           vuln-type: "os"
           image-ref: ${{ matrix.images }}
 
-      # 2. Count fixable vulns
+      # 2. Check vulnerability count
       - name: Check vulnerability count
         id: vuln_count
         run: |
-          report_file="report.json"
           vuln_count=$(jq 'if .Results then [
-              .Results[]
-              | select(.Class=="os-pkgs" and .Vulnerabilities!=null)
+              .Results[] 
+              | select(.Class=="os-pkgs" and .Vulnerabilities!=null) 
               | .Vulnerabilities[]
-            ] | length else 0 end' "$report_file")
-
-          echo "Detected $vuln_count fixable OS vulnerabilities in ${{ matrix.images }}"
+            ] | length else 0 end' report.json)
           echo "vuln_count=$vuln_count" >> $GITHUB_OUTPUT
+          echo "Detected $vuln_count fixable OS vulnerabilities for ${{ matrix.images }}"
 
-      # 3. Patch with COPA if vulnerabilities exist
+      # 3. Run COPA if we have fixable vulnerabilities
       - name: Run Copa action
         if: steps.vuln_count.outputs.vuln_count != '0'
         id: copa
@@ -59,81 +55,44 @@ jobs:
           image-report: "report.json"
           patched-tag: "patched"
           timeout: "5m"
-          output: "vex.json"
+          output: vex.json
           format: "openvex"
 
-      # 4. Fix vex.json permissions (in case it's root-owned)
-      - name: Fix vex.json permissions
+      # 4. Print vex.json (if generated) so you see if any CVEs were actually fixed
+      - name: Print vex.json
         if: steps.copa.conclusion == 'success'
         run: |
           if [ -f vex.json ]; then
             sudo chmod 644 vex.json
-          else
-            echo "No vex.json found. Possibly COPA didn't generate it or no patches were applied."
-          fi
-
-      # 5. Print vex.json for debugging (to see what's actually in it)
-      - name: Show vex.json contents
-        if: steps.copa.conclusion == 'success'
-        run: |
-          if [ -f vex.json ]; then
-            echo "==== vex.json content for ${{ matrix.images }} ===="
+            echo "=== vex.json contents for ${{ matrix.images }} ==="
             cat vex.json
           else
-            echo "No vex.json file was generated."
+            echo "No vex.json found."
           fi
 
-      # 6. Display which CVEs were fixed
-      - name: Show patched CVEs
-        if: steps.copa.conclusion == 'success'
-        run: |
-          if [ ! -f vex.json ]; then
-            echo "No vex.json to parse."
-            exit 0
-          fi
-
-          echo "===== CVEs patched in ${{ matrix.images }} ====="
-          # This jq query prints only the "fixed" vulnerabilities from vex.json
-          jq -r '
-            .statements
-            | map(select(.status == "fixed"))
-            | .[].vulnerability.id
-          ' vex.json || echo "None found."
-
-      # 7. Upload vex.json as an artifact (for each matrix image)
+      # 5. Upload vex.json as artifact under a safe name (no colons/slashes)
       - name: Upload vex.json artifact
         if: steps.copa.conclusion == 'success'
         uses: actions/upload-artifact@v3
         with:
-          name: vex-${{ matrix.images }}
+          name: vex-json
           path: vex.json
           if-no-files-found: ignore
 
-      # 8. Log in to GHCR (whether or not we patched)
+      # 6. Log in to GHCR (only if COPA succeeded)
       - name: Login to GHCR
-        if: steps.copa.conclusion == 'success' || steps.vuln_count.outputs.vuln_count == '0'
-        uses: docker/login-action@v3
+        if: steps.copa.conclusion == 'success'
+        id: login
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 9. Push either the patched or original image
-      - name: Push final image
+      # 7. Push patched image (if any)
+      - name: Push patched image
         if: steps.login.conclusion == 'success'
         run: |
-          # We create a safe tag name that doesn't contain slashes/colons
-          SANITIZED_TAG=$(echo "${{ matrix.images }}" | tr '/:' '-')
-          FINAL_TAG="ghcr.io/${{ github.repository_owner }}/patched-${SANITIZED_TAG}:latest"
-
-          if [ "${{ steps.vuln_count.outputs.vuln_count }}" = "0" ]; then
-            echo "No fixable vulns. Pushing original: ${{ matrix.images }}"
-            docker pull ${{ matrix.images }}
-            docker tag ${{ matrix.images }} "$FINAL_TAG"
-          else
-            PATCHED_LOCAL="${{ steps.copa.outputs.patched-image }}"
-            docker tag "$PATCHED_LOCAL" "$FINAL_TAG"
-          fi
-
-          echo "Pushing $FINAL_TAG..."
-          docker push "$FINAL_TAG"
+          echo "Retagging and pushing patched image for ${{ matrix.images }}"
+          docker tag ${{ steps.copa.outputs.patched-image }} ghcr.io/project-copacetic/copa-action/test/${{ steps.copa.outputs.patched-image }}
+          docker push ghcr.io/project-copacetic/copa-action/test/${{ steps.copa.outputs.patched-image }}
