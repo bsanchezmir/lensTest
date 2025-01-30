@@ -23,6 +23,7 @@ jobs:
           - "docker.io/library/alpine:3.18.4"
           - "docker.io/openpolicyagent/opa:0.46.0"
           - "docker.io/library/hello-world:latest"
+          - "quay.io/k8slens/bored-agent:0.12.8"
 
     steps:
       # 1. Trivy scan for OS-level vulnerabilities
