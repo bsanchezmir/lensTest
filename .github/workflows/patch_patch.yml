@@ -17,15 +17,17 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      #max-parallel: 2
+      max-parallel: 2
       matrix:
         images:
           - "docker.io/library/alpine:3.18.4"
           - "docker.io/openpolicyagent/opa:0.46.0"
           - "docker.io/library/hello-world:latest"
+
           - "ghcr.io/aquasecurity/trivy-operator:0.16.1"
           - "quay.io/k8slens/bored-agent:0.12.8"
           - "quay.io/k8slens/recurly-api-proxy:0.5.3"
+
 
     steps:
       # 1. Trivy scan for OS-level vulnerabilities
@@ -65,6 +67,7 @@ jobs:
               .Results[]
               | select(.Class=="os-pkgs" and .Vulnerabilities!=null)
               | .Vulnerabilities[]
+              | select(.Status=="fixed")
             ] | length else 0 end' "$report_file")
 
           echo "Detected $vuln_count *fixable* OS vulnerabilities in ${{ matrix.images }}"
