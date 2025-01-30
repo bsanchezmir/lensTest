@@ -35,7 +35,23 @@ jobs:
           vuln-type: "os"
           image-ref: ${{ matrix.images }}
 
-      # 2. Count fixable vulnerabilities
+      # 2. Extract CVE, Severity, and Title from Trivy's report.json
+      - name: Extract CVEs from Trivy Report
+        id: extract_cves
+        run: |
+          echo "=== Extracting OS-level CVEs from Trivy report for ${{ matrix.images }} ==="
+          # We'll parse .Results[].Vulnerabilities[] for Class= "os-pkgs"
+          jq -r '
+            .Results[]
+            | select(.Class == "os-pkgs")
+            | if .Vulnerabilities then .Vulnerabilities[] else empty end
+            | "CVE: \(.VulnerabilityID // "N/A"), Severity: \(.Severity // "N/A"), Title: \(.Title // "N/A")"
+          ' report.json > cves_report.txt
+
+          echo "Contents of cves_report.txt:"
+          cat cves_report.txt
+
+      # 3. Check vulnerability count for fixable vulns
       - name: Check vulnerability count
         id: vuln_count
         run: |
@@ -44,11 +60,13 @@ jobs:
               .Results[]
               | select(.Class=="os-pkgs" and .Vulnerabilities!=null)
               | .Vulnerabilities[]
+              | select(.Status=="fixed")
             ] | length else 0 end' "$report_file")
-          echo "Detected $vuln_count fixable OS vulnerabilities in ${{ matrix.images }}"
+
+          echo "Detected $vuln_count *fixable* OS vulnerabilities in ${{ matrix.images }}"
           echo "vuln_count=$vuln_count" >> $GITHUB_OUTPUT
 
-      # 3. Patch (COPA) if vulnerabilities exist
+      # 4. Patch (COPA) if fixable vulnerabilities exist
       - name: Run Copa action
         if: steps.vuln_count.outputs.vuln_count != '0'
         id: copa
@@ -61,55 +79,7 @@ jobs:
           output: vex.json
           format: "openvex"
 
-      # 4. Generate a file listing patched CVEs (if COPA ran successfully)
-      - name: Collect patched CVEs
-        if: steps.copa.conclusion == 'success'
-        run: |
-          if [ -f vex.json ]; then
-            sudo chmod 644 vex.json
-
-            echo "=== Parsing vex.json for ${{ matrix.images }} ==="
-            PATCHED_CVES=$(jq -r '
-              .statements
-              | map(select(.status == "fixed"))
-              | .[].vulnerability.id
-            ' vex.json)
-
-            if [ -n "$PATCHED_CVES" ]; then
-              echo "CVEs patched in ${{ matrix.images }}:"
-              echo "$PATCHED_CVES"
-              echo "$PATCHED_CVES" > cves_fixed.txt
-            else
-              echo "No CVEs were marked as 'fixed' in vex.json."
-              echo "None" > cves_fixed.txt
-            fi
-          else
-            echo "No vex.json found. Possibly no patches applied."
-            echo "None" > cves_fixed.txt
-          fi
-
-
-      # 5. Create artifact name via a shell step (to avoid 'replace()')
-      - name: Create artifact name
-        id: artifact_name
-        run: |
-          # Convert slashes and colons to dashes using 'tr'
-          SANITIZED=$(echo "${{ matrix.images }}" | tr '/:' '-')
-          ARTIFACT_NAME="patched-details-${SANITIZED}"
-          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-
-      # 6. Upload artifacts (Trivy report and cves_fixed.txt)
-      - name: Upload artifacts
-        if: steps.copa.conclusion == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.artifact_name.outputs.artifact_name }}
-          path: |
-            report.json
-            cves_fixed.txt
-          if-no-files-found: ignore
-
-      # 7. Log in to GHCR if COPA succeeded
+      # 5. Log in to GHCR if COPA ran
       - name: Login to GHCR
         if: steps.copa.conclusion == 'success'
         id: login
@@ -119,10 +89,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 8. Push patched image to GHCR
+      # 6. Push patched image to GHCR
       - name: Push patched image
         if: steps.login.conclusion == 'success'
         run: |
+          # Sanitize the matrix.images name so it can be used in a Docker tag
           SANITIZED_TAG=$(echo "${{ matrix.images }}" | tr '/:' '-')
           REPO_OWNER="${{ github.repository_owner }}"
           FINAL_IMAGE="ghcr.io/${REPO_OWNER}/copa-patched:${SANITIZED_TAG}"
@@ -130,3 +101,20 @@ jobs:
           echo "Retagging ${{ steps.copa.outputs.patched-image }} => $FINAL_IMAGE"
           docker tag ${{ steps.copa.outputs.patched-image }} "$FINAL_IMAGE"
           docker push "$FINAL_IMAGE"
+
+      # 7. Create artifact name from the matrix image
+      - name: Create artifact name
+        id: artifact_name
+        run: |
+          SANITIZED_IMG=$(echo "${{ matrix.images }}" | tr '/:' '-')
+          echo "artifact_name=trivy-and-cves-${SANITIZED_IMG}" >> $GITHUB_OUTPUT
+
+      # 8. Upload artifacts (Trivy report.json & cves_report.txt) with the new v4 version
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.artifact_name }}
+          path: |
+            report.json
+            cves_report.txt
+          if-no-files-found: ignore
