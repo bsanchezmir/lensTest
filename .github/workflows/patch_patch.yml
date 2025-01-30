@@ -20,19 +20,10 @@ jobs:
       #max-parallel: 2
       matrix:
         images:
-
-
           - "ghcr.io/aquasecurity/trivy-operator:0.16.1"
           - "quay.io/k8slens/bored-agent:0.12.8"
           - "quay.io/k8slens/recurly-api-proxy:0.5.3"
           - "gcr.io/distroless/cc-debian10"
-
-
-
-
-
-
-
     steps:
       # 1. Trivy scan for OS-level vulnerabilities
       - name: Generate Trivy Report
@@ -45,7 +36,6 @@ jobs:
           vuln-type: "os"
           image-ref: ${{ matrix.images }}
           
-
       # 2. Extract CVE, Severity, and Title from Trivy's report.json
       - name: Extract CVEs from Trivy Report
         run: |
@@ -176,3 +166,59 @@ jobs:
         with:
           name: full-cve-report
           path: full_cves_report.md
+
+  update_release_notes:
+    runs-on: ubuntu-latest
+    needs: merge_cves 
+    permissions:
+      contents: write
+    steps:
+      - name: Download Merged CVE Report
+        uses: actions/download-artifact@v4
+        with:
+          name: full-cve-report
+          path: .
+
+      - name: Authenticate with GitHub CLI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for Existing Release
+        id: get_release
+        run: |
+          LATEST_RELEASE=$(gh release list --limit 1 | awk '{print $1}')
+          echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Append CVE Report to Release
+        run: |
+          RELEASE_TITLE="Security Patch - $(date +'%Y-%m-%d')"
+          RELEASE_TAG="security-patch-$(date +'%Y-%m-%d')"
+
+          # Fetch existing release notes
+          EXISTING_NOTES=$(gh release view "$LATEST_RELEASE" --json body -q '.body' || echo "")
+
+          # Append the new CVE report to the existing release notes
+          echo "### New CVEs Added from Latest Run" > new_cves.md
+          cat full_cves_report.md >> new_cves.md
+          echo "" >> new_cves.md
+          
+          # Merge with previous release notes
+          echo "$EXISTING_NOTES" > updated_notes.md
+          cat new_cves.md >> updated_notes.md
+
+          if [ -z "$LATEST_RELEASE" ]; then
+            echo "No existing release found. Creating a new one..."
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file updated_notes.md \
+              --draft
+          else
+            echo "Updating existing release: $LATEST_RELEASE"
+            gh release edit "$LATEST_RELEASE" \
+              --notes-file updated_notes.md
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
