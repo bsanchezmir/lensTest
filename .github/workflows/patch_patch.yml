@@ -172,6 +172,11 @@ jobs:
       permissions:
         contents: write
       steps:
+        - name: Checkout Repository (Fix for gh release)
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 0  # Ensures full Git history is available
+
         - name: Download Merged CVE Report
           uses: actions/download-artifact@v4
           with:
