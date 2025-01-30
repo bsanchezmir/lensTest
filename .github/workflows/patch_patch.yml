@@ -6,7 +6,7 @@ on:
       - main
     paths-ignore:
       - '**.md'
-  workflow_dispatch:  # <-- enables manual trigger
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -58,7 +58,13 @@ jobs:
           output: "vex.json"      # store the result as vex.json
           format: "openvex"       # default is openvex
 
-      # 5. Display which CVEs got fixed
+      # 5. Fix permissions on vex.json so we can read it
+      - name: Fix vex.json permissions
+        if: steps.copa.conclusion == 'success'
+        run: |
+          chmod 644 vex.json
+
+      # 6. Display which CVEs got fixed
       - name: Show patched CVEs
         if: steps.copa.conclusion == 'success'
         run: |
@@ -69,7 +75,7 @@ jobs:
             | .[].vulnerability.id
           ' vex.json
 
-      # 6. Log in to GitHub Container Registry (GHCR)
+      # 7. Log in to GitHub Container Registry (GHCR)
       - name: Login to GHCR
         if: steps.copa.conclusion == 'success' || steps.vuln_count.outputs.vuln_count == '0'
         uses: docker/login-action@v3
@@ -78,7 +84,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. Tag and push the final image to GHCR
+      # 8. Tag and push the final image to GHCR
       - name: Push final image to GHCR
         if: steps.login.conclusion == 'success'
         run: |
