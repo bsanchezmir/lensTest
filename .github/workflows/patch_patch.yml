@@ -20,10 +20,10 @@ jobs:
       #max-parallel: 5
       matrix:
         images:
-          - "victoriametrics/vmagent:v1.108.1"
-          - "victoriametrics/vmalert:v1.108.1"
-          - "ghcr.io/fluxcd/helm-controller:v0.37.4"
-          - "ghcr.io/aquasecurity/trivy-operator:0.16.1"
+          - "mirantis.azurecr.io/openstack/tempest:victoria-focal-20240112082932"
+          - "mirantis.azurecr.io/openstack/nova:yoga-jammy-20240819060021"
+          - "mirantis.azurecr.io/openstack/requirements:antelope-jammy-20250609092426"
+          - "mirantis.azurecr.io/general/openvswitch:2.17-jammy-20250408072712"
           
     steps:
       # 1. Trivy scan for OS-level vulnerabilities
